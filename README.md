@@ -9,6 +9,50 @@ weave = { git = "https://github.com/ityeri/weave", tag = "v0.1.0" }
 # examples
 * `cargo run -r --example file_tree -- /some/directory -w 0.3` : runs a file tree visualizer example. `-w` is a wheel sensitivity option. (0.3 recommended)
 * `cargo run -r --example node_physics` : runs an example which simulates two central nodes and sub nodes of them.
+* `cargo run -r --example json_graph -- graph.json -w 0.3 --depth 2` : visualises a graph loaded from a JSON file.
+* `cargo run -r --example json_stats -- graph.json --depth 2` : loads the same file headlessly and times one update tick.
+
+# JSON graphs
+The `json` feature (on by default) adds `weave::json_loader`, a small serde-only bridge from a JSON
+file to a graph. The wire format is generic — any node/edge graph, dumped from any language:
+
+```json
+{
+  "directed": true,
+  "nodes": [
+    { "id": 0, "label": "ityeri", "depth": 0 },
+    { "id": 1, "label": "Jung2010", "depth": 1 }
+  ],
+  "edges": [
+    { "source": 1, "target": 0 }
+  ]
+}
+```
+
+`id` is a stable integer identity; `label` and `depth` are optional metadata (`depth` is what
+`GraphData::filter_depth(max)` filters on, the cheap way to feed a big hierarchical graph to an
+`n^2` updater one hop at a time). An edge `source -> target` is directed and its meaning is the
+caller's — the updaters treat a node's *incoming* count as its physical mass, so an edge should read
+as "source points at / follows / belongs to target".
+
+```rust
+use weave::json_loader::GraphData;
+
+let data = GraphData::from_path("graph.json")?;
+let data = data.filter_depth(2);           // keep hops 0..=2
+let (nodes, edges) = data.counts();
+```
+
+`examples/json_graph.rs` is the consumer to copy from: it loads the file, maps each node `id` to a
+`petgraph::StableGraph` node, and drives it with `QuadTreeUpdater` and the same `scrollrs` camera as
+`node_physics` (drag to pan, wheel to zoom, space to toggle the physics, `f` to fit the layout to
+the window). `examples/json_stats.rs` runs the same load and one tick without a window.
+
+`tools/to_weave.py` converts a login-keyed follow-graph dump (`{"nodes":[{"login",...}], "edges":[{"source","target"}]}`)
+into this format, and `tools/sample-graph.json` is a small graph to try the examples on.
+
+> The neighbour pass is currently `O(n^2)`, so a few thousand nodes is the practical ceiling for an
+> interactive session (~2 ms/tick at 640 nodes, ~2.5 s/tick at 40 587 nodes on a laptop-class CPU).
 
 # `Updater`
 All updaters follow this trait: `Updater`.

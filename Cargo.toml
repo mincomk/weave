@@ -6,6 +6,13 @@ edition = "2024"
 [dependencies]
 glam = "0.30.10"
 rayon = "1.11.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+
+[features]
+default = ["json"]
+# JSON graph loader (`weave::json_loader`). Enables the `json_graph` example.
+json = ["dep:serde", "dep:serde_json"]
 
 [dev-dependencies]
 chrono = "0.4.44"
@@ -16,3 +23,11 @@ petgraph = "0.8.2"
 rand = "0.9.0"
 scrollrs = { git = "https://github.com/ityeri/scrollrs.git", version = "0.1.0" }
 clock = { git = "https://github.com/ityeri/clock.git", version = "0.1.0" }
+
+[[example]]
+name = "json_graph"
+required-features = ["json"]
+
+[[example]]
+name = "json_stats"
+required-features = ["json"]
