@@ -9,7 +9,8 @@ weave = { git = "https://github.com/ityeri/weave", tag = "v0.1.0" }
 # examples
 * `cargo run -r --example file_tree -- /some/directory -w 0.3` : runs a file tree visualizer example. `-w` is a wheel sensitivity option. (0.3 recommended)
 * `cargo run -r --example node_physics` : runs an example which simulates two central nodes and sub nodes of them.
-* `cargo run -r --example json_graph -- graph.json -w 0.3 --depth 2` : visualises a graph loaded from a JSON file.
+* `cargo run -r --example json_graph -- graph.json -w 0.3 --depth 2` : visualises a graph loaded from a JSON file, with search and relation highlighting.
+* `cargo run -r --example json_graph -- graph.json --depth 2 --search mincomk` : opens with one login's neighbourhood already highlighted.
 * `cargo run -r --example json_stats -- graph.json --depth 2 --ticks 300` : loads the same file headlessly, runs the physics and reports tick time, layout radius and RSS.
 
 # JSON graphs
@@ -56,6 +57,26 @@ slice or a set of updater constants is checked without watching a screen.
 
 `tools/to_weave.py` converts a login-keyed follow-graph dump (`{"nodes":[{"login",...}], "edges":[{"source","target"}]}`)
 into this format, and `tools/sample-graph.json` is a small graph to try the examples on.
+
+`json_graph` is the interactive one, and it is built to be *read* rather than to be looked at. Node
+labels sit on a dark backing plate — a thin outline disappears into a dense core, a filled rectangle
+does not — and the viewer answers "who is this, and who is around them":
+
+* **`/`** opens a search box. Type a login and press `enter`: that account is selected, its one-hop
+  neighbourhood is coloured by the *relation* to it, and the camera keeps the group framed until you
+  pan, scroll or press `f` (fit the whole graph). `esc` closes the box, `c` clears the highlight.
+* `--search <login>` selects the same way at startup, which is what a headless capture run wants.
+
+The relation is read off the *directed* edges, so the direction convention above is what it means:
+
+| colour | relation | edges |
+|---|---|---|
+| amber | **following** — the selected account follows them | outgoing only |
+| blue | **follower** — they follow the selected account | incoming only |
+| green | **mutual** — both directions | both |
+
+An exact login match wins; otherwise the busiest account whose login starts with what was typed is
+used, so a prefix is enough when the full name is not to hand.
 
 > The neighbour pass is currently `O(n^2)`, so a few thousand nodes is the practical ceiling for an
 > interactive session (~2 ms/tick at 640 nodes, ~2.5 s/tick at 40 587 nodes on a laptop-class CPU).
