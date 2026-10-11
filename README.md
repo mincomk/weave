@@ -10,7 +10,7 @@ weave = { git = "https://github.com/ityeri/weave", tag = "v0.1.0" }
 * `cargo run -r --example file_tree -- /some/directory -w 0.3` : runs a file tree visualizer example. `-w` is a wheel sensitivity option. (0.3 recommended)
 * `cargo run -r --example node_physics` : runs an example which simulates two central nodes and sub nodes of them.
 * `cargo run -r --example json_graph -- graph.json -w 0.3 --depth 2` : visualises a graph loaded from a JSON file.
-* `cargo run -r --example json_stats -- graph.json --depth 2` : loads the same file headlessly and times one update tick.
+* `cargo run -r --example json_stats -- graph.json --depth 2 --ticks 300` : loads the same file headlessly, runs the physics and reports tick time, layout radius and RSS.
 
 # JSON graphs
 The `json` feature (on by default) adds `weave::json_loader`, a small serde-only bridge from a JSON
@@ -43,16 +43,49 @@ let data = data.filter_depth(2);           // keep hops 0..=2
 let (nodes, edges) = data.counts();
 ```
 
+`weave::layout` seeds a graph so the physics has somewhere to start: `seed_layout(&data)` gives one
+ring per hop — `GraphData::depth` when the file has it, BFS depth otherwise — with the nodes on each
+ring ordered by the mean angle of their neighbours on the ring inside, so the first frame is
+structure rather than confetti. `adjacency_of`, `depths_of` and `tidy_layout` are the pieces.
+
 `examples/json_graph.rs` is the consumer to copy from: it loads the file, maps each node `id` to a
-`petgraph::StableGraph` node, and drives it with `QuadTreeUpdater` and the same `scrollrs` camera as
-`node_physics` (drag to pan, wheel to zoom, space to toggle the physics, `f` to fit the layout to
-the window). `examples/json_stats.rs` runs the same load and one tick without a window.
+`petgraph::StableGraph` node, seeds it with `weave::layout`, and drives it with `QuadTreeUpdater` and
+the same `scrollrs` camera as `node_physics`. `examples/json_stats.rs` does the same load and runs
+the physics without a window, reporting tick time, layout radius, RSS and the farthest nodes — how a
+slice or a set of updater constants is checked without watching a screen.
 
 `tools/to_weave.py` converts a login-keyed follow-graph dump (`{"nodes":[{"login",...}], "edges":[{"source","target"}]}`)
 into this format, and `tools/sample-graph.json` is a small graph to try the examples on.
 
 > The neighbour pass is currently `O(n^2)`, so a few thousand nodes is the practical ceiling for an
 > interactive session (~2 ms/tick at 640 nodes, ~2.5 s/tick at 40 587 nodes on a laptop-class CPU).
+> `json_graph` therefore starts with the physics frozen above `--max-auto-nodes` (5000) and with the
+> edges hidden above `--max-edge-nodes` (20 000).
+
+# Physics
+`QuadTreeUpdater::default_setting()` is tuned for `node_physics`'s cloud — nodes seeded within a
+radius of `10 000` with small degrees. On a graph seeded at unit scale, and especially on one with a
+long tail of hubs, it takes itself apart: at 50 ticks a 640-node follow graph is at a median radius
+of `1.4e18`, because the bouncing force is proportional to the *product* of two masses and mass grows
+with in-degree while nothing at all pulls inward.
+
+Use `QuadTreeUpdater::unit_scale_setting()` for a graph seeded by `weave::layout` — it is the same
+model with every constant scaled to a unit-scale seed, slower mass growth, and a `containment_force`
+(a pull toward the origin) so the layout is bounded. The same 640-node graph settles at a stable
+median radius of ~12 units and stays there over thousands of ticks.
+
+Two things were also fixed in the tree itself, both of which could take the process down:
+
+* **Overlapping children.** A body exactly on a split line was contained by two children at once
+  (closed `<=` on both edges), so its mass was counted twice in the force sum — and when bodies were
+  coincident, *every* body went into all four children at every level and the tree grew as `4^depth`
+  until memory ran out. Containment is now half-open, and the root region is grown past the data so
+  nothing can sit on its far edge.
+* **Non-finite and degenerate state.** A divergent tick used to be able to write an infinite or `NaN`
+  position, after which every containment test is true for every child: same explosion. A step whose
+  result is not finite is now refused, a region that is not finite (or that the floats can no longer
+  split) is treated as a leaf, and an empty graph returns an empty tree instead of panicking.
+
 
 # `Updater`
 All updaters follow this trait: `Updater`.

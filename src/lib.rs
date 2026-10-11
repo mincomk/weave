@@ -6,3 +6,6 @@ pub mod updater;
 
 #[cfg(feature = "json")]
 pub mod json_loader;
+
+#[cfg(feature = "json")]
+pub mod layout;
